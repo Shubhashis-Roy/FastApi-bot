@@ -1,7 +1,7 @@
 import strawberry
 from typing import List
-from db import messages_collection
-from claude import ask_claude
+from .db import messages_collection
+from .claude import ask_claude
 from datetime import datetime
 
 @strawberry.type

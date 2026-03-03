@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from strawberry.fastapi import GraphQLRouter
-from schema import schema
+from .schema import schema
 from dotenv import load_dotenv
-from db import ping_db
+from .db import ping_db
 import os
 import uvicorn
 
