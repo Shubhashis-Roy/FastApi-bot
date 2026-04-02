@@ -11,6 +11,17 @@ class Message:
     bot: str
     timestamp: str
 
+def sanitize_bot_response(bot: str) -> str:
+    if not bot:
+        return bot
+
+    if "Claude error" in bot or "invalid_request_error" in bot:
+        if "credit balance is too low" in bot:
+            return "AI service quota exceeded. Please try again later."
+        return "AI service is temporarily unavailable."
+
+    return bot
+
 
 @strawberry.type
 class Query:
@@ -22,9 +33,10 @@ class Query:
         async for doc in cursor:
             messages.append(
                 Message(
-                    id=str(doc["_id"]),   # ✅ map Mongo _id → GraphQL id
+                    id=str(doc["_id"]),   
                     user=doc["user"],
-                    bot=doc["bot"],
+                    # bot=doc["bot"],
+                    bot=sanitize_bot_response(doc.get("bot", "")),
                     timestamp=doc["timestamp"],
                 )
             )
@@ -36,8 +48,13 @@ class Query:
 class Mutation:
     @strawberry.mutation
     async def send_message(self, text: str) -> Message:
-        reply = await ask_claude(text)
+        try:
+            reply = await ask_claude(text)
 
+        except Exception as e:
+            # safe fallback response
+            reply = getattr(e, "message", "Something went wrong.")
+        
         message = {
             "user": text,
             "bot": reply,
@@ -47,11 +64,10 @@ class Mutation:
         result = await messages_collection.insert_one(message)
 
         return Message(
-            id=str(result.inserted_id),  # ✅ REQUIRED
+            id=str(result.inserted_id),
             user=message["user"],
             bot=message["bot"],
             timestamp=message["timestamp"],
         )
-
 
 schema = strawberry.Schema(query=Query, mutation=Mutation)
