@@ -3,6 +3,7 @@ from typing import List
 from .db import messages_collection
 from .claude import ask_claude
 from datetime import datetime
+import json
 
 @strawberry.type
 class Message:
@@ -21,7 +22,6 @@ def sanitize_bot_response(bot: str) -> str:
         return "AI service is temporarily unavailable."
 
     return bot
-
 
 @strawberry.type
 class Query:
@@ -43,18 +43,42 @@ class Query:
 
         return messages
 
-
 @strawberry.type
 class Mutation:
     @strawberry.mutation
-    async def send_message(self, text: str) -> Message:
+    async def send_message(self, text: str, products: str) -> Message:
         try:
-            reply = await ask_claude(text)
+            products = json.loads(products)  # ✅ FIX
+
+            context = ""
+
+            for p in products:
+                title = p.get("title", "")
+                desc = p.get("description", "")
+                variants = p.get("variants", {}).get("nodes", [])
+                price = variants[0].get("price") if variants else ""
+
+                context += f"Title: {title}\nDescription: {desc}\nPrice: {price}\n\n"
+
+            prompt = f"""
+                    You are a Shopify store assistant.
+
+                    Products:
+                    {context}
+
+                    User question:
+                    {text}
+
+                    Answer ONLY using the provided products.
+                    If no relevant product, say "No matching products found".
+                    """
+
+            reply = await ask_claude(prompt)
 
         except Exception as e:
-            # safe fallback response
+            print("Error:", str(e))
             reply = getattr(e, "message", "Something went wrong.")
-        
+
         message = {
             "user": text,
             "bot": reply,
@@ -69,5 +93,4 @@ class Mutation:
             bot=message["bot"],
             timestamp=message["timestamp"],
         )
-
 schema = strawberry.Schema(query=Query, mutation=Mutation)
